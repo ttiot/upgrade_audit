@@ -17,8 +17,8 @@ from typing import Dict, List, Optional
 import requests
 
 API_URL = "https://api.openai.com/v1/chat/completions"
-OPENLLM_URL = "http://localhost:{port}/v1/chat/completions"
-MODEL = "gpt-3.5-turbo"
+DEFAULT_OPENLLM_URL = "http://localhost:3000/v1/chat/completions"
+MODEL = "gpt-4o"
 
 def run_cmd(command: str) -> str:
     """Exécute une commande shell et renvoie sa sortie ou une chaîne vide."""
@@ -107,9 +107,9 @@ def openai_request(prompt: str, key: str) -> str:
         return f"OpenAI request failed: {exc}"
 
 
-def openllm_request(prompt: str, port: int) -> str:
-    url = OPENLLM_URL.format(port=port)
-    headers = {"Authorization": "Bearer local"}
+
+def openllm_request(prompt: str, url: str, key: str) -> str:
+    headers = {"Authorization": f"Bearer {key or 'local'}"}
     data = {
         "model": MODEL,
         "messages": [{"role": "user", "content": prompt}],
@@ -131,7 +131,8 @@ def analyze_package(
     changelog: str,
     key: str,
     llm: str,
-    openllm_port: int,
+    openllm_url: str,
+    openllm_key: str,
 ) -> Dict[str, object]:
     prompt = (
         f"Nous envisageons de mettre à jour le paquet {name} de la version {current} "
@@ -151,7 +152,7 @@ def analyze_package(
             pass
     if llm == "openllm":
         print("  -> interrogation du serveur OpenLLM")
-        answer = openllm_request(prompt, openllm_port)
+        answer = openllm_request(prompt, openllm_url, openllm_key)
     else:
         print("  -> interrogation de l'API OpenAI")
         answer = openai_request(prompt, key)
@@ -222,11 +223,14 @@ def main() -> None:
     parser.add_argument("--format", choices=["md", "html"], default="md", help="Format du rapport")
     parser.add_argument("--openai-key", help="Clé API OpenAI (ou via OPENAI_API_KEY)")
     parser.add_argument("--llm", choices=["openai", "openllm"], default="openai", help="Fournisseur du LLM")
-    parser.add_argument("--openllm-port", type=int, default=3000, help="Port du serveur OpenLLM")
+    parser.add_argument("--openllm-url", default=DEFAULT_OPENLLM_URL, help="URL du serveur OpenLLM")
+    parser.add_argument("--openllm-key", help="Clé API OpenLLM (ou via OPENLLM_API_KEY)")
     parser.add_argument("--recipient", default="root", help="Destinataire du mail")
     args = parser.parse_args()
 
     key = args.openai_key or os.getenv("OPENAI_API_KEY")
+    openllm_key = args.openllm_key or os.getenv("OPENLLM_API_KEY", "")
+
     if args.llm == "openai" and not key:
         print("Clé API OpenAI requise", file=sys.stderr)
         sys.exit(1)
@@ -244,7 +248,17 @@ def main() -> None:
         current_version = installed.get(pkg, "")
         config = find_config_path(pkg)
         changelog = load_changelog(pkg)
-        item = analyze_package(pkg, current_version, candidate_version, config, changelog, key, args.llm, args.openllm_port)
+        item = analyze_package(
+            pkg,
+            current_version,
+            candidate_version,
+            config,
+            changelog,
+            key,
+            args.llm,
+            args.openllm_url,
+            openllm_key,
+        )
         items.append(item)
 
     print("Génération du rapport...")
