@@ -17,6 +17,7 @@ from typing import Dict, List, Optional
 import requests
 
 API_URL = "https://api.openai.com/v1/chat/completions"
+OPENLLM_URL = "http://localhost:{port}/v1/chat/completions"
 MODEL = "gpt-3.5-turbo"
 
 def run_cmd(command: str) -> str:
@@ -106,6 +107,22 @@ def openai_request(prompt: str, key: str) -> str:
         return f"OpenAI request failed: {exc}"
 
 
+def openllm_request(prompt: str, port: int) -> str:
+    url = OPENLLM_URL.format(port=port)
+    headers = {"Authorization": "Bearer local"}
+    data = {
+        "model": MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+    }
+    try:
+        resp = requests.post(url, headers=headers, json=data, timeout=30)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as exc:
+        return f"OpenLLM request failed: {exc}"
+
+
 def analyze_package(
     name: str,
     current: str,
@@ -113,6 +130,8 @@ def analyze_package(
     config_path: Optional[str],
     changelog: str,
     key: str,
+    llm: str,
+    openllm_port: int,
 ) -> Dict[str, object]:
     prompt = (
         f"Nous envisageons de mettre à jour le paquet {name} de la version {current} "
@@ -130,7 +149,12 @@ def analyze_package(
             prompt += f"\n\nConfiguration actuelle:\n```\n{config_content}\n```"
         except Exception:
             pass
-    answer = openai_request(prompt, key)
+    if llm == "openllm":
+        print("  -> interrogation du serveur OpenLLM")
+        answer = openllm_request(prompt, openllm_port)
+    else:
+        print("  -> interrogation de l'API OpenAI")
+        answer = openai_request(prompt, key)
     safe = "safe" in answer.lower() and "not safe" not in answer.lower()
     breaking = "breaking" in answer.lower()
     return {
@@ -197,25 +221,33 @@ def main() -> None:
     parser.add_argument("--output", default="upgrade_report.md", help="Fichier de sortie si --no-email")
     parser.add_argument("--format", choices=["md", "html"], default="md", help="Format du rapport")
     parser.add_argument("--openai-key", help="Clé API OpenAI (ou via OPENAI_API_KEY)")
+    parser.add_argument("--llm", choices=["openai", "openllm"], default="openai", help="Fournisseur du LLM")
+    parser.add_argument("--openllm-port", type=int, default=3000, help="Port du serveur OpenLLM")
     parser.add_argument("--recipient", default="root", help="Destinataire du mail")
     args = parser.parse_args()
 
     key = args.openai_key or os.getenv("OPENAI_API_KEY")
-    if not key:
+    if args.llm == "openai" and not key:
         print("Clé API OpenAI requise", file=sys.stderr)
         sys.exit(1)
 
+    print("Récupération des paquets installés...")
     installed = get_installed_packages(args.installed_file)
+    print(f"{len(installed)} paquets installés détectés")
+    print("Récupération des paquets upgradables...")
     upgradable = get_upgradable_packages(args.upgradable_file)
+    print(f"{len(upgradable)} mises à jour disponibles")
 
     items: List[Dict[str, object]] = []
     for pkg, candidate_version in upgradable.items():
+        print(f"Analyse du paquet {pkg}...")
         current_version = installed.get(pkg, "")
         config = find_config_path(pkg)
         changelog = load_changelog(pkg)
-        item = analyze_package(pkg, current_version, candidate_version, config, changelog, key)
+        item = analyze_package(pkg, current_version, candidate_version, config, changelog, key, args.llm, args.openllm_port)
         items.append(item)
 
+    print("Génération du rapport...")
     report = generate_report(items, args.format)
 
     if args.no_email:
