@@ -18,7 +18,7 @@ import requests
 
 API_URL = "https://api.openai.com/v1/chat/completions"
 DEFAULT_OPENLLM_URL = "http://localhost:3000/v1/chat/completions"
-MODEL = "gpt-3.5-turbo"
+MODEL = "gpt-4o"
 
 def run_cmd(command: str) -> str:
     """Exécute une commande shell et renvoie sa sortie ou une chaîne vide."""
@@ -105,6 +105,7 @@ def openai_request(prompt: str, key: str) -> str:
         return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as exc:
         return f"OpenAI request failed: {exc}"
+
 
 
 def openllm_request(prompt: str, url: str, key: str) -> str:
@@ -229,6 +230,7 @@ def main() -> None:
 
     key = args.openai_key or os.getenv("OPENAI_API_KEY")
     openllm_key = args.openllm_key or os.getenv("OPENLLM_API_KEY", "")
+
     if args.llm == "openai" and not key:
         print("Clé API OpenAI requise", file=sys.stderr)
         sys.exit(1)
