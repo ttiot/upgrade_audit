@@ -19,7 +19,7 @@ python3 audit_upgrade.py --openai-key MON_API_KEY
 Pour utiliser un serveur OpenLLM local :
 
 ```bash
-python3 audit_upgrade.py --llm openllm --openllm-port 3000
+python3 audit_upgrade.py --llm openllm --openllm-url http://localhost:3000/v1/chat/completions
 ```
 
 Options principales :
@@ -28,7 +28,8 @@ Options principales :
 - `--format {md,html}` : format du rapport.
 - `--no-email` : ne pas envoyer le rapport par mail, l'enregistrer localement.
 - `--llm {openai,openllm}` : choix du modèle de langage à utiliser.
-- `--openllm-port` : port du serveur OpenLLM (3000 par défaut).
+- `--openllm-url` : URL complète du serveur OpenLLM.
+- `--openllm-key` : clé API pour OpenLLM (optionnel).
 ```
 
 Le script n'effectue aucune mise à jour; il se contente de produire un rapport.
